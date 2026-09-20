@@ -6,8 +6,9 @@
 #
 # Installs Nix if missing, applies the home-manager configuration, and then
 # installs the agent tooling that lives outside Nix (skills, no-mistakes, gnhf,
-# treehouse, firstmate, opencode, win32yank). Re-running it is safe: every step
-# checks whether it is already done.
+# treehouse, firstmate, the *-axi agent tools, opencode, win32yank) and points
+# git's HTTPS credential helper at gh. Re-running it is safe: every step checks
+# whether it is already done.
 #
 set -euo pipefail
 
@@ -137,7 +138,42 @@ if ! have gnhf; then
 fi
 
 # ---------------------------------------------------------------------------
-# 9. treehouse (reusable worktree pool for parallel agents)
+# 9. Agent tool family (global npm packages under ~/.npm-global)
+# ---------------------------------------------------------------------------
+# firstmate and its workers call these on PATH: gh-axi and chrome-devtools-axi
+# wrap GitHub and browser work, lavish-axi renders rich HTML review surfaces,
+# and tasks-axi and quota-axi expose task and quota state. They are installed
+# like gnhf, into the same writable npm prefix that home.sessionPath exposes.
+if have npm; then
+  agent_tools=(gh-axi chrome-devtools-axi lavish-axi tasks-axi quota-axi)
+  missing_tools=()
+  for tool in "${agent_tools[@]}"; do
+    have "$tool" || missing_tools+=("$tool")
+  done
+  if [ "${#missing_tools[@]}" -gt 0 ]; then
+    log "Installing the agent tool family: ${missing_tools[*]}"
+    mkdir -p "$HOME_DIR/.npm-global"
+    npm config set prefix "$HOME_DIR/.npm-global"
+    # One install per tool so one bad package cannot block the others.
+    for tool in "${missing_tools[@]}"; do
+      optional npm install -g "$tool"
+    done
+  fi
+else
+  warn "npm not found on PATH; skipping the agent tool family"
+fi
+
+# The setup hooks register each tool's SessionStart hook, which carries its
+# ambient context into agent sessions. setup hooks is idempotent and repairs a
+# stale path after a reinstall, so it is safe to run for every present tool.
+for tool in gh-axi chrome-devtools-axi lavish-axi; do
+  if have "$tool"; then
+    optional "$tool" setup hooks
+  fi
+done
+
+# ---------------------------------------------------------------------------
+# 10. treehouse (reusable worktree pool for parallel agents)
 # ---------------------------------------------------------------------------
 if ! have treehouse; then
   log "Installing treehouse"
@@ -145,7 +181,7 @@ if ! have treehouse; then
 fi
 
 # ---------------------------------------------------------------------------
-# 10. GitHub CLI login (interactive, one time; needed by no-mistakes/firstmate)
+# 11. GitHub CLI login (interactive, one time; needed by no-mistakes/firstmate)
 # ---------------------------------------------------------------------------
 if have gh; then
   if gh auth status >/dev/null 2>&1; then
@@ -159,7 +195,33 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 11. firstmate (agent distro: one first mate supervising a crew)
+# 12. Git HTTPS credentials via gh
+# ---------------------------------------------------------------------------
+# HTTPS clones and pushes to GitHub authenticate through gh, so git never
+# falls back to a username prompt. The helper must name the stable gh on PATH:
+# an earlier config pointed at ~/.nix-profile/bin/.gh-wrapped, which does not
+# exist (nix profiles do not expose dotfiles from package bins), so git hung on
+# the prompt instead. --replace-all also repairs duplicate helper entries.
+if have gh; then
+  GH_PATH="$(command -v gh)"
+  for host in github.com gist.github.com; do
+    git config --global --replace-all \
+      "credential.https://${host}.helper" "!${GH_PATH} auth git-credential"
+  done
+  # Non-fatal probe: confirm git resolves a username for github.com. It reads
+  # the stored credential but never prints it. A miss only warns, because auth
+  # may not be finished yet on this run.
+  CRED_PROBE="$(printf 'protocol=https\nhost=github.com\n\n' \
+    | GIT_TERMINAL_PROMPT=0 git credential fill 2>/dev/null || true)"
+  if ! grep -q '^username=' <<<"$CRED_PROBE"; then
+    warn "git could not confirm a GitHub credential yet; re-run ./install.sh after 'gh auth login'"
+  fi
+else
+  warn "gh not found on PATH; skipping the git credential-helper setup"
+fi
+
+# ---------------------------------------------------------------------------
+# 13. firstmate (agent distro: one first mate supervising a crew)
 # ---------------------------------------------------------------------------
 if [ ! -d "$HOME_DIR/github/firstmate/.git" ]; then
   log "Cloning firstmate"
