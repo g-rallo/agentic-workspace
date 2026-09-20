@@ -15,13 +15,17 @@
     nodejs_22
     unzip
     herdr
+    # herdr's worker backend refuses to spawn without jq, and firstmate's
+    # status summaries use it; it is a hard dependency, not a convenience.
+    jq
     claude-code
   ];
 
   # Writable per-user bin dirs outside the Nix store. ~/.local/bin holds
   # release-binary tools (win32yank, no-mistakes, treehouse),
   # ~/.opencode/bin is OpenCode's own installer location, and
-  # ~/.npm-global/bin holds global npm packages (gnhf); install.sh seeds them.
+  # ~/.npm-global/bin holds global npm packages (gnhf and the *-axi agent
+  # tools); install.sh seeds them.
   home.sessionPath = [
     "${homeDirectory}/.local/bin"
     "${homeDirectory}/.opencode/bin"
