@@ -50,4 +50,26 @@ if (Test-Path $linkPath) {
 Write-Host "==> Linking $linkPath -> $configTarget"
 New-Item -ItemType SymbolicLink -Path $linkPath -Target $configTarget | Out-Null
 
+Write-Host "==> Installing the WSL2 resource config"
+$wslConfigSource = Join-Path $PSScriptRoot "wslconfig"
+$wslConfigTarget = Join-Path $env:USERPROFILE ".wslconfig"
+
+if (-not (Test-Path $wslConfigSource)) {
+  throw "WSL2 config not found at $wslConfigSource. Run this script from the repo's windows\ directory."
+}
+
+if ((Test-Path $wslConfigTarget) -and -not (Compare-Object (Get-Content $wslConfigTarget) (Get-Content $wslConfigSource))) {
+  Write-Host "$wslConfigTarget is already up to date"
+} else {
+  if (Test-Path $wslConfigTarget) {
+    Write-Host "==> Backing up the existing config to $wslConfigTarget.bak"
+    Copy-Item $wslConfigTarget "$wslConfigTarget.bak" -Force
+  }
+  Write-Host "==> Copying $wslConfigSource -> $wslConfigTarget"
+  Copy-Item $wslConfigSource $wslConfigTarget -Force
+}
+
+Write-Host "==> WSL2 resource limits apply only after 'wsl --shutdown'."
+Write-Host "    Warning: 'wsl --shutdown' closes every WSL session and distro. Save your work first."
+
 Write-Host "Done. Launch WezTerm from the Start menu."

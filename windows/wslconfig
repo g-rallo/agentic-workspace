@@ -1,0 +1,27 @@
+# WSL2 resource limits for the agentic-workspace environment.
+#
+# WSL2 defaults to a small fraction of the Windows host's RAM and a tiny swap
+# file, which is not enough for Android/Flutter/Gradle builds. When a build
+# exceeds the VM's memory, the Linux kernel OOM killer fires and can kill the
+# whole login session (tmux, the editor, the terminal connection).
+#
+# Copy this file to %USERPROFILE%\.wslconfig and run `wsl --shutdown` to apply.
+
+[wsl2]
+# RAM ceiling for the WSL2 VM. All Linux processes share this; a build that
+# exceeds it starts swapping, then gets OOM-killed.
+memory=4GB
+# Swap file size for the WSL2 VM. Generous swap absorbs build spikes instead
+# of letting the kernel kill processes.
+swap=8GB
+# Number of virtual CPUs the WSL2 VM may use.
+processors=4
+
+[experimental]
+# Return free memory from the WSL2 VM back to Windows gradually as Linux
+# releases it, instead of holding it until `wsl --shutdown`.
+autoMemoryReclaim=gradual
+
+# These values are a sane default for a ~16 GB Windows laptop doing builds.
+# On a smaller machine, lower memory and swap proportionally (for example
+# memory=2GB / swap=4GB on 8 GB) so WSL leaves the host enough to run Windows.
