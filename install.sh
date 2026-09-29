@@ -114,6 +114,15 @@ if [ ! -d "$HOME_DIR/.agents/skills/find-skills" ]; then
   optional npx --yes skills@latest add vercel-labs/skills \
     --skill find-skills --global --agent '*' --yes
 fi
+# pr-description is authored in this repo, so it is copied from the checkout
+# rather than fetched. Re-running skips an install that is already present.
+if [ ! -d "$HOME_DIR/.agents/skills/pr-description" ]; then
+  log "Installing pr-description skill"
+  mkdir -p "$HOME_DIR/.agents/skills/pr-description"
+  optional cp "$REPO_DIR/skills/pr-description/SKILL.md" \
+    "$REPO_DIR/skills/pr-description/release-tests-template.html" \
+    "$HOME_DIR/.agents/skills/pr-description/"
+fi
 
 # ---------------------------------------------------------------------------
 # 7. no-mistakes (validation gate; also installs its /no-mistakes skill)
