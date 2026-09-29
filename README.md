@@ -21,7 +21,7 @@ So this repo keeps that portable core and drops the rest:
 - `home.nix` declares the environment: packages, zsh, starship, and edit-in-place config symlinks.
 - `rebuild.sh` re-applies the configuration.
 - `install.sh` bootstraps everything that is *not* a Nix package: Nix itself on a fresh machine, the zsh login shell, GitHub CLI authentication and git's credential helper, and the agent skills and release-binary tools below.
-- `windows/setup.ps1` handles the Windows side (WezTerm install and config symlink), which cannot run from WSL.
+- `windows/setup.ps1` handles the Windows side (WezTerm install and config symlink, plus the WSL2 resource config), which cannot run from WSL.
 
 The repo is self-contained: cloning it and running `install.sh` is the whole install. The configuration auto-detects your username, home directory and clone location, so the same repo works on any WSL distro or Linux user without edits.
 
@@ -100,12 +100,14 @@ powershell -ExecutionPolicy Bypass -File .\windows\setup.ps1
 
 Then launch WezTerm from the Start menu. It opens straight into the WSL shell with everything on `PATH`.
 
+Besides WezTerm, `windows/setup.ps1` also copies `windows/wslconfig` to `%USERPROFILE%\.wslconfig` (backing up any existing file to `.wslconfig.bak` first). WSL2 defaults to only a small fraction of the Windows host's RAM and a tiny swap file, which is too little for Android/Flutter/Gradle builds; when a build exceeds it, the Linux kernel OOM killer can kill processes and even the whole login session. The config raises the VM's RAM ceiling, swap size, and vCPU count, and returns freed memory to Windows gradually. These limits apply only after `wsl --shutdown`, which closes every WSL session, so save your work first. The shipped values suit a ~16 GB laptop; lower them on smaller machines.
+
 ### After install (manual steps)
 
 These need interactive logins or Windows UI. `install.sh` already runs `gh auth login` when GitHub is not yet authenticated, so the only remaining steps are:
 
 1. **Agent CLIs**: run `claude` and `opencode auth login` once and pick a subscription or API account
-2. **Windows WezTerm**: run `windows/setup.ps1` as described above
+2. **Windows side**: run `windows/setup.ps1` as described above (installs WezTerm, links its config, and installs `.wslconfig`)
 
 For `firstmate` (multi-repo agent crews), see the [firstmate docs](https://github.com/kunchenguid/firstmate); it needs `gh` authenticated and is launched with `cd ~/github/firstmate && claude`.
 
@@ -120,7 +122,8 @@ agentic-workspace/
 ├── install.sh             # one-command bootstrap for a fresh machine
 ├── .gitignore
 ├── windows/
-│   └── setup.ps1          # WezTerm install + config symlink (Windows side)
+│   ├── setup.ps1          # WezTerm install + config symlink, WSL2 resource config (Windows side)
+│   └── wslconfig          # WSL2 memory/swap/CPU limits, copied to %USERPROFILE%\.wslconfig
 └── home/
     ├── AGENTS.md          # shared global agent instructions
     ├── CLAUDE.md
