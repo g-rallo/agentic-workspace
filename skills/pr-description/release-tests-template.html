@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Release vX.Y.Z tests</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/daisyui.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/themes.css">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.2.4/dist/index.global.js"></script>
+<style>
+  :root { --ink:#1F2937; --paper:#F8FAFC; --accent:#2563EB; --tip:#475569; }
+  body { background:var(--paper); color:var(--ink); }
+  .card-head { background:var(--ink); color:#fff; }
+  .tag { font-size:11px; padding:1px 8px; border-radius:999px; background:#E2E8F0; color:var(--ink); font-weight:600; white-space:nowrap; }
+  .tag.new { background:var(--accent); color:#fff; }
+  .item { display:flex; gap:.75rem; align-items:flex-start; padding:.6rem .25rem; border-bottom:1px solid #E5E9F0; }
+  .item:last-child { border-bottom:0; }
+  .item.done .txt { opacity:.45; text-decoration:line-through; }
+  .txt { min-width:0; }
+  .how { font-size:13px; color:var(--tip); margin-top:2px; }
+  code { background:#EEF2F7; padding:0 4px; border-radius:4px; font-size:12px; word-break:break-all; }
+</style>
+</head>
+<body class="min-h-screen">
+<main class="max-w-3xl mx-auto px-4 py-8">
+  <header class="mb-6">
+    <p class="text-sm font-semibold" style="color:var(--accent)">Release test pass</p>
+    <h1 class="text-3xl font-bold">Release vX.Y.Z test checklist</h1>
+    <p class="mt-2 text-sm">Backend <a class="link" href="https://github.com/<org>/<repo>/pull/NNN">#NNN</a> + frontend <a class="link" href="https://github.com/<org>/<repo>/pull/NNN">#NNN</a>. <span class="tag new">new</span> marks steps changed since the last round. Checkboxes are saved in this browser.</p>
+    <div class="mt-4 flex items-center gap-3">
+      <progress id="bar" class="progress w-64" value="0" max="100" style="color:var(--accent)"></progress>
+      <span id="count" class="text-sm font-semibold"></span>
+      <button id="reset" class="btn btn-xs btn-ghost">reset</button>
+    </div>
+  </header>
+
+  <section id="list" class="flex flex-col gap-5"></section>
+
+  <footer class="mt-8 text-xs" style="color:#64748B">Tell your agent in chat what fails; include the step number.</footer>
+</main>
+<script>
+// One entry per section: t = title, sub = the PRs it covers (and where to test).
+// One item per concrete check: [check, how-to hint or "", 1 if new since the last round else 0].
+// Section 0 mirrors the PR's "Manual steps": the server/deployment side a human applies by hand.
+const S = [
+{t:"0 · Manual server steps (apply first)", items:[
+  ["Run the migration.","e.g. `supabase db push` from the repo root; link the project first.",0],
+  ["Set the shared secret in both places, to the same value.","e.g. Vault + edge function secret; order matters.",0],
+  ["Deploy the changed functions or config.","",0],
+  ["Release the client build that matches the new schema.","",0]]},
+{t:"1 · Setup", items:[
+  ["Open the app at URL and log in to the admin at URL.","",0],
+  ["Every manual step above is done and verified.","",0]]},
+{t:"2 · AREA", sub:"#NNN", items:[
+  ["A concrete check a person can see pass or fail.","How to trigger it, if not obvious.",1]]},
+{t:"3 · Nothing else broke", sub:"quick smoke", items:[
+  ["A fresh session still starts and the main flow works.","",0]]}
+];
+const KEY="RELEASE-vXYZ-tests"; // unique per page, so the two rounds do not share ticks
+let st={}; try{ st=JSON.parse(localStorage.getItem(KEY)||"{}"); }catch(e){}
+const save=()=>{ try{ localStorage.setItem(KEY,JSON.stringify(st)); }catch(e){} };
+const list=document.getElementById("list");
+let total=0;
+S.forEach((sec,si)=>{
+  const c=document.createElement("div"); c.className="card bg-white shadow-sm overflow-hidden";
+  c.innerHTML=`<div class="card-head px-4 py-2 flex flex-wrap items-baseline gap-x-3"><h2 class="font-bold">${sec.t}</h2>${sec.sub?`<span class="text-xs opacity-80">${sec.sub}</span>`:""}</div><div class="px-3 py-1"></div>`;
+  const body=c.lastElementChild;
+  sec.items.forEach(([txt,how,isNew],ii)=>{
+    total++; const id=`${si}-${ii}`;
+    const row=document.createElement("label"); row.className="item cursor-pointer";
+    row.innerHTML=`<input type="checkbox" class="checkbox checkbox-sm mt-0.5" ${st[id]?"checked":""}><div class="txt"><div>${txt} ${isNew?'<span class="tag new">new</span>':""}</div>${how?`<div class="how">${how}</div>`:""}</div>`;
+    if(st[id]) row.classList.add("done");
+    row.querySelector("input").addEventListener("change",e=>{ st[id]=e.target.checked; row.classList.toggle("done",e.target.checked); save(); upd(); });
+    body.appendChild(row);
+  });
+  list.appendChild(c);
+});
+function upd(){ const n=Object.values(st).filter(Boolean).length; document.getElementById("bar").value=Math.round(100*n/total); document.getElementById("count").textContent=`${n} / ${total} done`; }
+document.getElementById("reset").onclick=()=>{ st={}; save(); location.reload(); };
+upd();
+</script>
+</body>
+</html>
