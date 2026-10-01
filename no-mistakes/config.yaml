@@ -1,0 +1,14 @@
+# Standing no-mistakes gate-agent configuration for this machine.
+#
+# install.sh merges the keys below into the generated ~/.no-mistakes/config.yaml
+# (which no-mistakes owns and rewrites with many other keys), so the validation
+# gate always runs on Pi with the model below. Only the keys this repo owns live
+# here - never copy the whole generated file, and never put a credential in it.
+#
+# The OpenCode Zen key that authenticates Pi is a secret and is never tracked
+# here; see the README "After install (manual steps)" section.
+agent: pi
+
+agent_config:
+  pi:
+    model: opencode/deepseek-v4.1-flash

@@ -33,7 +33,7 @@ The repo is self-contained: cloning it and running `install.sh` is the whole ins
 | Shell | zsh with autosuggestions and syntax highlighting, [starship](https://starship.rs) prompt |
 | Editor | neovim + lazy.nvim, oil.nvim and snacks.nvim navigation, Windows clipboard via `win32yank` |
 | Terminal | WezTerm, a native Windows GUI app launched from the Start menu into the WSL shell |
-| Agent CLI | Claude Code (nixpkgs) and OpenCode (multi-provider CLI) |
+| Agent CLI | Claude Code (nixpkgs), OpenCode (multi-provider CLI), and Pi (the standing no-mistakes gate agent) |
 | Shared agent config | One `AGENTS.md` symlinked to the path every tool checks (Claude, Codex, OpenCode) |
 | Agent skills | [lavish](#agent-skills), [no-mistakes](#agent-skills), [find-skills](#agent-skills), [pr-description](#agent-skills) |
 | Agent tooling | `no-mistakes` (validation gate), `gnhf` (overnight agent loop), `treehouse` (worktree pool), `firstmate` (multi-repo crew), `gh` (GitHub CLI), and the [`*-axi` agent tools](#agent-tools) |
@@ -59,6 +59,12 @@ The repo is self-contained: cloning it and running `install.sh` is the whole ins
 - **`quota-axi`** - reports per-provider quota and remaining runway.
 
 For `gh-axi`, `chrome-devtools-axi` and `lavish-axi`, install also runs each tool's idempotent `setup hooks`, which registers an agent SessionStart hook so its ambient context reaches new agent sessions.
+
+### no-mistakes gate agent
+
+The validation gate runs on **Pi** (`@earendil-works/pi-coding-agent`, the `pi` command), pinned to the `opencode/deepseek-v4.1-flash` model through the OpenCode Zen key. Pi is a firstmate-verified harness that honors firstmate's `disable_project_settings: true` (OpenCode itself cannot), which is why it is this machine's standing gate agent.
+
+That choice is tracked in [`no-mistakes/config.yaml`](no-mistakes/config.yaml) and applied by `install.sh`: the two keys this repo owns (`agent: pi` and `agent_config.pi.model`) are merged into the generated `~/.no-mistakes/config.yaml`, preserving every other key, backing the file up first, and re-running safely. The OpenCode Zen key is a secret and is never tracked here; authenticate Pi once as described under [After install](#after-install-manual-steps).
 
 ## Quick start
 
@@ -89,7 +95,7 @@ cd agentic-workspace
 exec zsh
 ```
 
-`install.sh` installs Nix if missing, applies the home-manager configuration, sets zsh as the login shell, authenticates the GitHub CLI, points git's HTTPS credential helper for `github.com` and `gist.github.com` at `gh`, and installs the non-Nix tooling. Re-running it is safe. To apply later changes to `home.nix`, use `./rebuild.sh`.
+`install.sh` installs Nix if missing, applies the home-manager configuration, sets zsh as the login shell, authenticates the GitHub CLI, points git's HTTPS credential helper for `github.com` and `gist.github.com` at `gh`, installs the non-Nix tooling, and merges the standing no-mistakes gate-agent configuration from `no-mistakes/config.yaml`. Re-running it is safe. To apply later changes to `home.nix`, use `./rebuild.sh`.
 
 On the Windows side, once, in PowerShell:
 
@@ -108,7 +114,8 @@ Besides WezTerm, `windows/setup.ps1` also copies `windows/wslconfig` to `%USERPR
 These need interactive logins or Windows UI. `install.sh` already runs `gh auth login` when GitHub is not yet authenticated, so the only remaining steps are:
 
 1. **Agent CLIs**: run `claude` and `opencode auth login` once and pick a subscription or API account
-2. **Windows side**: run `windows/setup.ps1` as described above (installs WezTerm, links its config, and installs `.wslconfig`)
+2. **Pi (no-mistakes gate agent)**: authenticate once with `pi /login` and choose OpenCode, or set the `OPENCODE_API_KEY` environment variable to the OpenCode Zen key. This key is a secret: it stays on the machine and is never committed to this repo
+3. **Windows side**: run `windows/setup.ps1` as described above (installs WezTerm, links its config, and installs `.wslconfig`)
 
 For `firstmate` (multi-repo agent crews), see the [firstmate docs](https://github.com/kunchenguid/firstmate); it needs `gh` authenticated and is launched with `cd ~/github/firstmate && claude`.
 
@@ -121,6 +128,8 @@ agentic-workspace/
 ├── home.nix               # packages, zsh, starship, config symlinks
 ├── rebuild.sh             # re-apply home-manager after config edits
 ├── install.sh             # one-command bootstrap for a fresh machine
+├── no-mistakes/
+│   └── config.yaml        # standing gate-agent settings merged into ~/.no-mistakes/config.yaml
 ├── .gitignore
 ├── skills/
 │   └── pr-description/    # repo-authored agent skill, copied to ~/.agents/skills
@@ -150,7 +159,7 @@ agentic-workspace/
                     └── ui.lua
 ```
 
-Everything installed by `install.sh` but not tracked here (`opencode`, the skills, `no-mistakes`, `gnhf`, `treehouse`, `firstmate`, the `*-axi` agent tools) lives outside the repo, in `~/.opencode/bin`, `~/.local/bin`, `~/.npm-global`, `~/.agents/skills`, or its own clone.
+Everything installed by `install.sh` but not tracked here (`opencode`, `pi`, the skills, `no-mistakes`, `gnhf`, `treehouse`, `firstmate`, the `*-axi` agent tools) lives outside the repo, in `~/.opencode/bin`, `~/.local/bin`, `~/.npm-global`, `~/.agents/skills`, or its own clone.
 
 ## Design notes
 
@@ -158,7 +167,8 @@ Everything installed by `install.sh` but not tracked here (`opencode`, the skill
 - **Auto-detected identity.** `flake.nix` reads `USER`, `HOME` and `WORKSPACE_DIR` from the environment (`rebuild.sh` runs home-manager with `--impure`), so nothing is hardcoded to a particular user or clone path.
 - **Edit-in-place configs.** `wezterm`, `nvim`, `herdr`, `.claude/settings.json` and the `AGENTS.md` symlinks use `config.lib.file.mkOutOfStoreSymlink`, a real symlink to the live files in this repo, so edits take effect immediately with no rebuild. `./rebuild.sh` is only for changes to `home.nix` itself.
 - **WezTerm stays on Windows.** It is a native Windows GUI app; a Linux-built WezTerm inside headless WSL has no window to draw into. It reads `%USERPROFILE%\.wezterm.lua`, which `windows/setup.ps1` symlinks to the config in this repo.
-- **External tools are deliberately not in Nix.** `opencode`, `gnhf`, `no-mistakes`, `treehouse`, `firstmate` and the `*-axi` agent tools are optional, fast-moving, or not packaged, so `install.sh` installs them into writable per-user locations instead of the read-only Nix store.
+- **External tools are deliberately not in Nix.** `opencode`, `pi`, `gnhf`, `no-mistakes`, `treehouse`, `firstmate` and the `*-axi` agent tools are optional, fast-moving, or not packaged, so `install.sh` installs them into writable per-user locations instead of the read-only Nix store.
+- **The standing gate agent is tracked, not hand-edited.** `no-mistakes/config.yaml` holds only the gate-agent keys this repo owns; `install.sh` merges them into the generated `~/.no-mistakes/config.yaml` rather than editing it in place, so a provisioned machine gets the same Pi gate without a manual step. The Pi credential is never tracked.
 - **`jq` is a hard dependency, not a convenience.** herdr's worker backend refuses to spawn without it and firstmate's status summaries call it, so `jq` is declared in `home.nix` with the rest of the packages.
 - **Git HTTPS auth comes from `gh`.** `install.sh` points git's credential helpers for `github.com` and `gist.github.com` at the stable `gh` on `PATH` (`!gh auth git-credential`), so HTTPS clones and pushes use the `gh auth login` session instead of prompting for a username. The step replaces stale entries, including the old `.gh-wrapped` path that did not exist on disk.
 
@@ -167,7 +177,7 @@ Everything installed by `install.sh` but not tracked here (`opencode`, the skill
 - Edit `home.nix`, then run `./rebuild.sh`. New files added to the repo need `git add` before a rebuild will pick them up.
 - **`~/.zshrc` is not directly editable.** home-manager generates it as a symlink into the read-only Nix store, so manual edits fail. Shell changes go through `home.nix` (`programs.zsh.shellAliases`, `home.sessionPath`), then `./rebuild.sh`.
 - `~/.local/bin`, `~/.opencode/bin` and `~/.npm-global/bin` are on `PATH` via `home.sessionPath`. Release-binary tools and global npm packages land there. OpenCode's installer runs with `--no-modify-path` so it never touches `~/.zshrc`.
-- `win32yank` is installed into `~/.local/bin`; `opencode` installs itself into `~/.opencode/bin`; `gnhf` and the `*-axi` agent tools are global npm packages under `~/.npm-global`; `no-mistakes` and `treehouse` prefer `~/.local/bin` when it is on `PATH`.
+- `win32yank` is installed into `~/.local/bin`; `opencode` installs itself into `~/.opencode/bin`; `pi`, `gnhf` and the `*-axi` agent tools are global npm packages under `~/.npm-global`; `no-mistakes` and `treehouse` prefer `~/.local/bin` when it is on `PATH`.
 - `claude-code` is unfree, so `flake.nix` sets `config.allowUnfree = true;`.
 - `/tmp` in WSL can be wiped if the distro restarts mid-task; run multi-step installs (like `install.sh`) as one uninterrupted block.
 - herdr writes runtime logs and sockets into its config dir, which is symlinked into this repo; those paths are gitignored so the working tree stays clean.

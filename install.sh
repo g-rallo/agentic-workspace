@@ -5,10 +5,10 @@
 #   git clone <this-repo> && cd agentic-workspace && ./install.sh
 #
 # Installs Nix if missing, applies the home-manager configuration, and then
-# installs the agent tooling that lives outside Nix (skills, no-mistakes, gnhf,
-# treehouse, firstmate, the *-axi agent tools, opencode, win32yank) and points
-# git's HTTPS credential helper at gh. Re-running it is safe: every step checks
-# whether it is already done.
+# installs the agent tooling that lives outside Nix (skills, no-mistakes, pi,
+# gnhf, treehouse, firstmate, the *-axi agent tools, opencode, win32yank) and
+# points git's HTTPS credential helper at gh. Re-running it is safe: every step
+# checks whether it is already done.
 #
 set -euo pipefail
 
@@ -137,7 +137,77 @@ if have no-mistakes && git -C "$REPO_DIR" remote get-url origin >/dev/null 2>&1;
 fi
 
 # ---------------------------------------------------------------------------
-# 8. gnhf (overnight autonomous agent loop; global npm package)
+# 8. Pi (coding-agent CLI; the machine's standing no-mistakes gate agent)
+# ---------------------------------------------------------------------------
+if ! have pi; then
+  log "Installing Pi"
+  optional npm install -g @earendil-works/pi-coding-agent
+fi
+
+# ---------------------------------------------------------------------------
+# 9. no-mistakes standing gate-agent config (tracked in no-mistakes/config.yaml)
+# ---------------------------------------------------------------------------
+# no-mistakes owns ~/.no-mistakes/config.yaml and regenerates it with many keys,
+# so the two keys this repo owns (agent: and agent_config.pi.model) are MERGED
+# into the generated file rather than overwriting it. The merge preserves every
+# other key and comment, backs the file up first, and is idempotent: re-running
+# reproduces the same file with no duplicates. It touches no credentials - the
+# Pi login is a manual step (see README). The tracked file is the source of
+# truth, so the values are not duplicated here.
+if have no-mistakes && [ -f "$REPO_DIR/no-mistakes/config.yaml" ]; then
+  NM_CONFIG="$HOME_DIR/.no-mistakes/config.yaml"
+  if [ -f "$NM_CONFIG" ]; then
+    log "Applying the standing no-mistakes gate-agent configuration"
+    cp -p "$NM_CONFIG" "$NM_CONFIG.bak"
+    merged="$(mktemp)"
+    if awk -v tracked="$REPO_DIR/no-mistakes/config.yaml" '
+      BEGIN {
+        while ((getline t < tracked) > 0) {
+          if (t ~ /^agent:/) { sub(/^agent:[[:space:]]*/, "", t); agent = t }
+          else if (t ~ /^agent_config:/) { in_ac = 1 }
+          else if (in_ac && t ~ /^[^[:space:]#]/) { in_ac = 0 }
+          else if (in_ac && t ~ /^  pi:/) { in_pi = 1 }
+          else if (in_pi && t ~ /^    model:/) { sub(/^[[:space:]]*model:[[:space:]]*/, "", t); model = t }
+        }
+        close(tracked)
+      }
+      { line[NR] = $0 }
+      END {
+        n = NR
+        ac_start = 0
+        for (i = 1; i <= n; i++) if (line[i] ~ /^agent_config:[[:space:]]*$/) { ac_start = i; break }
+        ac_end = n + 1
+        if (ac_start) for (i = ac_start + 1; i <= n; i++) if (line[i] ~ /^[^[:space:]#]/) { ac_end = i; break }
+        pi_start = 0
+        if (ac_start) for (i = ac_start + 1; i < ac_end; i++) if (line[i] ~ /^  pi:[[:space:]]*$/) { pi_start = i; break }
+        model_idx = 0
+        if (pi_start) for (i = pi_start + 1; i < ac_end; i++) if (line[i] ~ /^    model:/) { model_idx = i; break }
+        o = 0; agent_seen = 0
+        for (i = 1; i <= n + 1; i++) {
+          if (!ac_start && i == n + 1) { out[++o] = "agent_config:"; out[++o] = "  pi:"; out[++o] = "    model: " model }
+          if (ac_start && !pi_start && i == ac_end) { out[++o] = "  pi:"; out[++o] = "    model: " model }
+          if (!agent_seen && i == n + 1) out[++o] = "agent: " agent
+          if (i == n + 1) break
+          if (line[i] ~ /^agent:/) { out[++o] = "agent: " agent; agent_seen = 1; continue }
+          if (model_idx && i == model_idx) { out[++o] = "    model: " model; continue }
+          if (pi_start && !model_idx && i == pi_start) { out[++o] = line[i]; out[++o] = "    model: " model; continue }
+          out[++o] = line[i]
+        }
+        for (i = 1; i <= o; i++) print out[i]
+      }
+    ' "$NM_CONFIG" >"$merged"; then
+      cat "$merged" > "$NM_CONFIG"
+    else
+      warn "no-mistakes config merge failed; $NM_CONFIG left unchanged (backup: $NM_CONFIG.bak)"
+    fi
+    rm -f "$merged"
+  else
+    warn "$NM_CONFIG not found; run 'no-mistakes init' then re-run ./install.sh"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 10. gnhf (overnight autonomous agent loop; global npm package)
 # ---------------------------------------------------------------------------
 if ! have gnhf; then
   log "Installing gnhf"
@@ -147,7 +217,7 @@ if ! have gnhf; then
 fi
 
 # ---------------------------------------------------------------------------
-# 9. Agent tool family (global npm packages under ~/.npm-global)
+# 11. Agent tool family (global npm packages under ~/.npm-global)
 # ---------------------------------------------------------------------------
 # firstmate and its workers call these on PATH: gh-axi and chrome-devtools-axi
 # wrap GitHub and browser work, lavish-axi renders rich HTML review surfaces,
@@ -182,7 +252,7 @@ for tool in gh-axi chrome-devtools-axi lavish-axi; do
 done
 
 # ---------------------------------------------------------------------------
-# 10. treehouse (reusable worktree pool for parallel agents)
+# 12. treehouse (reusable worktree pool for parallel agents)
 # ---------------------------------------------------------------------------
 if ! have treehouse; then
   log "Installing treehouse"
@@ -190,7 +260,7 @@ if ! have treehouse; then
 fi
 
 # ---------------------------------------------------------------------------
-# 11. GitHub CLI login (interactive, one time; needed by no-mistakes/firstmate)
+# 13. GitHub CLI login (interactive, one time; needed by no-mistakes/firstmate)
 # ---------------------------------------------------------------------------
 if have gh; then
   if gh auth status >/dev/null 2>&1; then
@@ -204,7 +274,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 12. Git HTTPS credentials via gh
+# 14. Git HTTPS credentials via gh
 # ---------------------------------------------------------------------------
 # HTTPS clones and pushes to GitHub authenticate through gh, so git never
 # falls back to a username prompt. The helper must name the stable gh on PATH:
@@ -230,7 +300,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 13. firstmate (agent distro: one first mate supervising a crew)
+# 15. firstmate (agent distro: one first mate supervising a crew)
 # ---------------------------------------------------------------------------
 if [ ! -d "$HOME_DIR/github/firstmate/.git" ]; then
   log "Cloning firstmate"
@@ -252,6 +322,8 @@ Manual steps that cannot be fully automated:
   1. Authenticate the agent CLIs:
        claude      (pick a subscription or API account)
        opencode auth login  (pick a provider or API account)
+       pi /login   (choose OpenCode; authenticates the no-mistakes gate agent.
+                    The OpenCode Zen key is a secret and is never committed.)
   2. Windows, once, in PowerShell as Administrator (or with Developer Mode on):
 
        winget install wez.wezterm
